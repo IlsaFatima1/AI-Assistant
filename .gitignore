@@ -10,5 +10,5 @@ wheels/
 .venv
 .env
 
-# Temporary Analysis Directory
+# Ignored Cloned Project Analysis
 temp_havenly/
