@@ -1,4 +1,4 @@
-# Havenly Project Audit, Analysis & Database Bug Fix Report
+# Havenly Project Audit, Analysis & Complete Bug Fix Report
 **Prepared by:** Jules, Principal Software Engineer / Codebase Auditor
 **Date:** July 2026
 **Target Repository:** [IlsaFatima1/Havenly](https://github.com/IlsaFatima1/Havenly)
@@ -13,7 +13,7 @@ The project sets itself apart by avoiding generic boilerplate and implementing *
 2. **Localized AI Search Engine:** Natively understands and translates local Pakistani real estate units (e.g., *lakh*, *crore*, *marla*) into standard quantitative metrics (PKR currency values and square footage) and precise search filters.
 3. **Decoupled Real-time Messaging & Notification Pipeline:** Leverages advanced PostgreSQL triggers to coordinate real-time chat, in-app alerts, and asynchronous email notification outbox queuing entirely within the database.
 
-During our audit, we identified **two critical architectural/database bugs** that prevent the database features and AI integrations from functioning in a clean environment. This report details the system architecture, code quality, and provides the **exact, production-ready fixes** to fully resolve the issue.
+During our audit, we identified **four critical bugs** that prevent the database features, buyer-seller messaging, AI integrations, and price displays from functioning properly. This report details the system architecture, code quality, and provides the **exact, production-ready fixes** to resolve every issue.
 
 ---
 
@@ -181,7 +181,7 @@ end $$;
     outputType: schemas[task]
   });
   ```
-  `'gpt-4.1-mini'` is an invalid model identifier that does not exist in any LLM ecosystem, causing any AI-related search, chat, title-generator, or pricing operations to fail instantly with a "Model Not Found" or bad request exception from the gateway.
+  `'gpt-4.1-mini'` is an invalid model identifier that does not exist in any LLM ecosystem, causing any AI-related search, chat, title-generator, or pricing operations to fail instantly.
 
 * **The Fix:**
   Change the fallback model identifier to the actual, standard lightweight model `'gpt-4o-mini'`:
@@ -194,6 +194,86 @@ const agent = new Agent({
   model: Deno.env.get('OPENAI_MODEL') ?? 'gpt-4o-mini', // <-- Fixed to gpt-4o-mini
   outputType: schemas[task as keyof typeof schemas]
 });
+```
+
+---
+
+### Bug 3: Missing Buy / Contact Property Feature (Unrendered Component)
+* **The Root Cause:**
+  A complete and fully operational `ContactSellerButton` component was developed inside `src/features/properties/PropertyDetailsPage.tsx` at line 27. It correctly imports messaging context, validates seller credentials, calls the Supabase `get_or_create_property_conversation` function, and redirects the buyer to the chat workspace.
+
+  **However, they completely forgot to render it inside the JSX layout!** The button is defined but never called, making it impossible for buyers to actually contact sellers, initiate a purchase, or message lists on details pages.
+
+* **The Fix:**
+  Render `<ContactSellerButton property={property}/>` as the primary call-to-action inside the `OwnerCard` component:
+
+```tsx
+// Inside src/features/properties/PropertyDetailsPage.tsx (within OwnerCard component):
+function OwnerCard({property,favorite,toggleFavorite,share}:{property:Property;favorite:boolean;toggleFavorite:()=>void;share:()=>void}){
+  return (
+    <aside className="sticky top-24 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Listed by</p>
+      <div className="mt-4 flex items-center gap-3">
+        <span className="grid size-14 place-items-center rounded-2xl bg-[#073b3a] font-display font-bold text-white">{owner.initials}</span>
+        <div>
+          <p className="font-display font-semibold">{owner.name}</p>
+          <p className="text-xs text-slate-500">{owner.title}</p>
+          <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-teal-700"><CheckCircle2 className="size-3"/>Verified owner</p>
+        </div>
+      </div>
+
+      {/* ADDED THIS LINE TO RENDER THE MESSAGING CTA AND ENABLE BUY PROPERTY/CONTACT FEATURES */}
+      <ContactSellerButton property={property}/>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <a href={`https://wa.me/${owner.whatsapp}...`} ...>
+          <Button className="w-full bg-[#20a862] hover:bg-[#198c51]"><MessageCircle className="size-4"/>WhatsApp</Button>
+        </a>
+        ...
+      </div>
+    </aside>
+  );
+}
+```
+
+---
+
+### Bug 4: Dollars (`$`) Displayed Instead of Rupees (`PKR`)
+* **The Root Cause:**
+  Since Havenly is a verticalized software targeted entirely to Karachi, Pakistan, pricing amounts are set in PKR (Pakistani Rupees) and natural language searches expect PKR (Lakhs and Crores). However, the price rendering code across the property details, search list, and admin controls hardcodes the dollar symbol (`$`), confusing users.
+
+* **The Fix:**
+  Change all occurrences of literal `$` pricing displays to `PKR ` inside:
+  1. `src/features/properties/PropertyPages.tsx` (Card prices)
+  2. `src/features/properties/PropertyDetailsPage.tsx` (Details price & Related card prices)
+  3. `src/features/search/PropertySearchPage.tsx` (Search results prices)
+  4. `src/features/admin/AdminDashboard.tsx` (Moderation prices)
+
+* **Code replacements:**
+```tsx
+// 1. In src/features/properties/PropertyPages.tsx
+// Old: ${property.price.toLocaleString()}
+// New:
+PKR {property.price.toLocaleString()}
+
+// 2. In src/features/properties/PropertyDetailsPage.tsx
+// Old (main): ${property.price.toLocaleString()}
+// New:
+PKR {property.price.toLocaleString()}
+
+// Old (RelatedCard): ${p.price.toLocaleString()}
+// New:
+PKR {p.price.toLocaleString()}
+
+// 3. In src/features/search/PropertySearchPage.tsx
+// Old: ${p.price.toLocaleString()}
+// New:
+PKR {p.price.toLocaleString()}
+
+// 4. In src/features/admin/AdminDashboard.tsx
+// Old: ${p.price.toLocaleString()}
+// New:
+PKR {p.price.toLocaleString()}
 ```
 
 ---
@@ -268,8 +348,6 @@ if (marla && !filters.minSquareFeet && !filters.maxSquareFeet) {
 ---
 
 ## 8. Areas of Improvement & Suggested Mitigations
-
-While Havenly is engineered beautifully, the following architectural additions would elevate it to absolute world-class standard:
 
 | Feature / Area | Observation | Recommendation / Mitigation |
 | :--- | :--- | :--- |
