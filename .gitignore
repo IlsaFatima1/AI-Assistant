@@ -9,3 +9,6 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Ignored Cloned Project Analysis
+temp_havenly/
